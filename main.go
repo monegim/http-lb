@@ -39,5 +39,13 @@ type HealthChecks struct {
 }
 
 func RootHandler(w http.ResponseWriter, r *http.Request) {
+	LogRequest(r)
+}
 
+func LogRequest(r *http.Request) {
+	log.Println("Received request from", r.RemoteAddr)
+	log.Printf("%s %s %s\n", r.Method, r.URL, r.Proto)
+	log.Printf("Host: %s\n", r.Host)
+	log.Println("User-Agent:", r.UserAgent())
+	log.Println("Accept:", r.Header.Get("Accept"))
 }

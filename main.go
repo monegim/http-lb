@@ -1,24 +1,28 @@
 package main
 
 import (
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 )
 
-var client = &http.Client{}
+var (
+	client = &http.Client{}
+
+	backends = map[string]Backend{
+		"first": {
+			Address: "http://localhost:8090",
+		},
+	}
+)
 
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-	//backends := map[string]Backend{
-	//	"first": {
-	//		Address: "http://localhost",
-	//		Port:    8090,
-	//	},
-	//}
 	http.HandleFunc("/", RootHandler)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
@@ -39,6 +43,35 @@ type HealthChecks struct {
 }
 
 func RootHandler(w http.ResponseWriter, r *http.Request) {
+	u, err := url.Parse(backends["first"].Address)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	r.RequestURI = ""
+	r.URL.Host = u.Host
+	r.URL.Scheme = u.Scheme
+
+	res, err := client.Do(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	for k, v := range res.Header {
+		w.Header()[k] = v
+	}
+	body := res.Body
+	body.Close()
+	b, err := io.ReadAll(body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Write(b)
 	LogRequest(r)
 }
 

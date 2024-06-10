@@ -64,7 +64,7 @@ func RootHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header()[k] = v
 	}
 	body := res.Body
-	body.Close()
+	defer body.Close()
 	b, err := io.ReadAll(body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

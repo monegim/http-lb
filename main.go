@@ -9,13 +9,17 @@ import (
 )
 
 var (
-	client = &http.Client{}
+	client = Client{}
 
-	backends = map[string]Backend{
-		"first": {
+	backends = []Backend{
+		{
 			Address: "http://localhost:8090",
 		},
+		{
+			Address: "http://localhost:8091",
+		},
 	}
+	requestCounter int
 )
 
 func main() {
@@ -28,12 +32,11 @@ func main() {
 }
 
 type Client struct {
-	http.Client
+	*http.Client
 }
 
 type Backend struct {
 	Address     string
-	Port        int
 	HealthCheck HealthChecks
 }
 type HealthChecks struct {
@@ -43,7 +46,9 @@ type HealthChecks struct {
 }
 
 func RootHandler(w http.ResponseWriter, r *http.Request) {
-	u, err := url.Parse(backends["first"].Address)
+	backend := backends[requestCounter%len(backends)]
+	requestCounter++
+	u, err := url.Parse(backend.Address)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))

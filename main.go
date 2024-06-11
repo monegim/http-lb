@@ -1,6 +1,7 @@
 package main
 
 import (
+	"http-lb/internal"
 	"io"
 	"log"
 	"net/http"
@@ -9,8 +10,6 @@ import (
 )
 
 var (
-	client = Client{}
-
 	backends = []Backend{
 		{
 			Address: "http://localhost:8090",
@@ -20,6 +19,7 @@ var (
 		},
 	}
 	requestCounter int
+	client         = internal.NewRequester()
 )
 
 func main() {
@@ -29,10 +29,6 @@ func main() {
 	}
 	http.HandleFunc("/", RootHandler)
 	log.Fatal(http.ListenAndServe(":8080", nil))
-}
-
-type Client struct {
-	*http.Client
 }
 
 type Backend struct {
@@ -59,7 +55,7 @@ func RootHandler(w http.ResponseWriter, r *http.Request) {
 	r.URL.Host = u.Host
 	r.URL.Scheme = u.Scheme
 
-	res, err := client.Do(r)
+	res, err := client.HttpClient.Do(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))

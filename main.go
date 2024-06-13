@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 )
 
 var (
@@ -38,7 +39,8 @@ type Backend struct {
 type HealthChecks struct {
 	Path               string
 	Timeout            int
-	ExpectedStatusCode int
+	ExpectedStatusCode []int
+	Ready              bool
 }
 
 func RootHandler(w http.ResponseWriter, r *http.Request) {
@@ -82,4 +84,16 @@ func LogRequest(r *http.Request) {
 	log.Printf("Host: %s\n", r.Host)
 	log.Println("User-Agent:", r.UserAgent())
 	log.Println("Accept:", r.Header.Get("Accept"))
+}
+
+func (b *Backend) Ping() (bool, error) {
+	endpoint := b.Address + b.HealthCheck.Path
+	res, err := client.HttpClient.Get(endpoint)
+	if err != nil {
+		return false, err
+	}
+	if slices.Contains(b.HealthCheck.ExpectedStatusCode, res.StatusCode) {
+		return true, nil
+	}
+	return false, nil
 }

@@ -4,24 +4,31 @@ import (
 	"http-lb/internal"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var (
-	backends = []Backend{
-		{
-			Address: "http://localhost:8090",
-		},
-		{
-			Address: "http://localhost:8091",
+	serverPool = ServerPool{
+		backends: []*Backend{
+			{
+				Address: "http://localhost:8090",
+			}, {
+				Address: "http://localhost:8091",
+			},
 		},
 	}
 	requestCounter int
 	client         = internal.NewRequester()
+)
+
+const (
+	interval = 5
 )
 
 func main() {
@@ -30,6 +37,8 @@ func main() {
 		port = "8080"
 	}
 	http.HandleFunc("/", lb)
+
+	go serverPool.healthcheck()
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatal(err)
 	}
@@ -70,6 +79,19 @@ func (s *ServerPool) HealthCheckBackends() {
 	}
 }
 
+func (s *ServerPool) GetNextPeer() *Backend {
+	nextIndex := s.NextIndex()
+	l := len(s.backends) + nextIndex
+	for i := nextIndex; i < l; i++ {
+		idx := i % len(s.backends)
+		b := s.backends[idx]
+		if b.isBackendAlive() {
+			return b
+		}
+	}
+	return nil
+}
+
 func (b *Backend) SetAlive(alive bool) {
 	b.mux.RLock()
 	b.Alive = alive
@@ -78,10 +100,11 @@ func (b *Backend) SetAlive(alive bool) {
 }
 
 type Backend struct {
-	Address     string
-	mux         *sync.RWMutex
-	HealthCheck HealthCheck
-	Alive       bool
+	Address      string
+	mux          *sync.RWMutex
+	HealthCheck  HealthCheck
+	Alive        bool
+	ReverseProxy *httputil.ReverseProxy
 }
 type HealthCheck struct {
 	Path               string
@@ -89,8 +112,25 @@ type HealthCheck struct {
 	ExpectedStatusCode []int
 }
 
-func lb(w http.ResponseWriter, r *http.Request) {
+func (s *ServerPool) healthcheck() {
+	t := time.NewTicker(time.Second * interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-t.C:
+			log.Println("Starting healthcheck...")
+			s.HealthCheckBackends()
+			log.Println("Health check done.")
+		}
+	}
+}
 
+func lb(w http.ResponseWriter, r *http.Request) {
+	peer := serverPool.GetNextPeer()
+	if peer == nil {
+		http.Error(w, "no peer available", http.StatusServiceUnavailable)
+	}
+	peer.ReverseProxy.ServeHTTP(w, r)
 	//requestCounter++
 	//u, err := url.Parse()
 	//if err != nil {
